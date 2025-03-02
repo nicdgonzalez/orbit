@@ -1,0 +1,32 @@
+#!/usr/bin/bash
+
+# Allow the program to exit immediately if any commands fail.
+set -eo pipefail
+# Enable tracing if the TRACE environment variable is set (for debugging).
+[[ ! -z "${TRACE+x}" ]] && set -x
+
+main() {
+    # Ensure we are inside of a tmux session.
+    if [ -z "$TMUX" ]; then
+        echo >&2 "error: not inside a tmux session"
+        exit 1
+    fi
+
+    # Rename the current window to "main".
+    tmux rename-window "main"
+
+    # Create a new window for terminal commands.
+    tmux new-window -d -n "terminal"
+
+    # Create a third window for scratch work.
+    tmux new-window -d -n "scratch"
+
+    # Open the editor in the main window, pointing to the current directory.
+    $EDITOR .
+}
+
+# Call the main function with any provided command-line arguments.
+main "$@"
+
+# Unset the main function to prevent it from being exposed as a shell function.
+unset -f main
