@@ -6,8 +6,6 @@
 # ██║   ██║██╔══██╗██╔══██╗██║   ██║
 # ╚██████╔╝██║  ██║██████╔╝██║   ██║
 #  ╚═════╝ ╚═╝  ╚═╝╚═════╝ ╚═╝   ╚═╝
-#
-# Quickly spin up pre-configured tmux sessions for your projects.
 
 set -eo pipefail
 [ ! -z "${TRACE+x}" ] && set -x
@@ -15,23 +13,10 @@ set -eo pipefail
 ORBIT_VERSION="0.1.0"
 
 main() {
-    if ! command -v bash > /dev/null; then
-        echo >&2 "error: expected bash to be installed and on PATH"
-        exit 1
-    fi
+    declare query="$1"
 
-    if ! command -v tmux > /dev/null; then
-        echo >&2 "error: expected tmux to be installed and on PATH"
-        exit 1
-    fi
-
-    if ! command -v fzf > /dev/null; then
-        echo >&2 "error: expected fzf to be installed and on PATH"
-        exit 1
-    fi
-
-    # Handle command-line arguments.
-    parse_args "$@"
+    validate_dependencies
+    parse_options "$@"
 
     local directories="$(echo "$ORBIT_PATH" | tr ':' ' ')"
     local options="$(find $directories -mindepth 1 -maxdepth 1 -type d)"
@@ -40,7 +25,7 @@ main() {
         tmux has-session -t "=$session_name" 2> /dev/null \
             && tmux capture-pane -pt "$session_name" 2> /dev/null \
             || echo "Session not running."
-    ';
+    '
     local selected="$( \
         echo "$options" \
         | fzf \
@@ -49,13 +34,13 @@ main() {
             --with-nth '-1' \
             --preview "$preview" \
             --preview-window 'nohidden' \
-            --preview-label 'Preview' \
-            --query "$1" \
-            --select-1 \
-            --height=80% \
-            --tmux=80% \
+            --preview-label 'Session Preview' \
+            --height=50% \
             --margin=5%,1% \
             --border \
+            --tmux=center,90%,50%,border-native \
+            --query "$query" \
+            --select-1 \
     )"
 
     if [ -z "$selected" ]; then
@@ -63,19 +48,19 @@ main() {
         exit 0
     fi
 
-    # tmux uses ':' and '.' to separate sessions, windows, and panes.
+    # tmux uses ':' and '.' to separate sessions, windows, and panes;
+    # ensure these characters are not used for the session name.
     local session_name="$(basename "$selected" | tr ':. ' '___')"
 
-    # If `selected` does not contain an `orbit.sh`, use `fallback` instead.
+    # Create the fallback script if it doesn't already exist.
     local fallback="${XDG_CONFIG_HOME:-$HOME/.config}/orbit/orbit.sh"
-
-    # If the fallback script does not exist yet, create it.
     if [ ! -e "$fallback" ]; then
         mkdir --parents "$(dirname "$fallback")"
         echo "$(get_template)" > "$fallback"
         chmod u+x "$fallback"
     fi
 
+    # If `selected` does not contain an orbit.sh, use `fallback` instead.
     local script="$(test -e "$selected/orbit.sh" && echo "$selected/orbit.sh" || echo "$fallback")"
 
     # Create the tmux session if it doesn't already exist.
@@ -92,7 +77,24 @@ main() {
     fi
 }
 
-parse_args() {
+validate_dependencies() {
+    if ! command -v bash > /dev/null; then
+        echo >&2 "error: expected bash to be installed and on PATH"
+        exit 1
+    fi
+
+    if ! command -v tmux > /dev/null; then
+        echo >&2 "error: expected tmux to be installed and on PATH"
+        exit 1
+    fi
+
+    if ! command -v fzf > /dev/null; then
+        echo >&2 "error: expected fzf to be installed and on PATH"
+        exit 1
+    fi
+}
+
+parse_options() {
     while [ $# -gt 0 ]; do
         case "$1" in
             '-h' | '--help')
@@ -123,7 +125,7 @@ orbit_help() {
     echo "\
 🚀 Quickly spin up pre-configured tmux sessions for your projects.
 
-USAGE: $0 [OPTIONS] [--] [QUERY]
+USAGE: $(basename "$0") [OPTIONS] [--] [QUERY]
 
 OPTIONS:
   -h, --help     Print help
@@ -137,45 +139,15 @@ orbit_version() {
 }
 
 get_template() {
-    echo "\
-#!/usr/bin/bash
-
-# Allow the program to exit immediately if any commands fail.
-set -eo pipefail
-# If the environment variable TRACE is set, enable tracing.
-[ ! -z \"\${TRACE+x}\" ] && set -x
-
-main() {
-    # Check if we are inside of a tmux session.
-    if [ -z \"\${TMUX+x}\" ]; then
-        echo >&2 'error: expected script to be ran from within a tmux session'
-        exit 1
-    fi
-
-    # Use '{session}:{window}.{pane}' format to reference windows or panes.
-    local session_name=\"\$(tmux list-sessions -F \"\${session_name}\" -f \"\${session_attached}\")\"
-
-    tmux rename-window \"main\"
-    tmux new-window -d -n \"terminal\"
-    tmux new-window -d -n \"scratch\"
-
-    tmux send-keys -t \"\$session_name:terminal\" 'echo \"Hello, World!\"' 'Enter'
-
-    \$EDITOR .
-}
-
-# Call 'main' with any provided command-line arguments.
-main \"\$@\"
-
-# Unset functions to prevent them from being exposed as shell functions.
-unset -f main"
+    cat "$PWD/template.txt"
 }
 
 # The main entry point to the program.
 main "$@"
 
 unset -f main
-unset -f parse_args
+unset -f validate_dependencies
+unset -f parse_options
 unset -f orbit_help
 unset -f orbit_version
 unset -f get_template
