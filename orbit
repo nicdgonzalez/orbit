@@ -10,71 +10,31 @@
 set -eo pipefail
 [ ! -z "${TRACE+x}" ] && set -x
 
-ORBIT_VERSION="0.1.0"
-
 main() {
-    declare query="$1"
-
+    # Ensure the required dependencies are installed.
     validate_dependencies
+
+    # Handle command-line options (--help, --version, etc.).
     parse_options "$@"
 
-    local directories="$(echo "$ORBIT_PATH" | tr ':' ' ')"
-    local options="$(find $directories -mindepth 1 -maxdepth 1 -type d)"
-    local preview='
-        session_name="$(echo {-1} | tr ":. " "___")";
-        tmux has-session -t "=$session_name" 2> /dev/null \
-            && tmux capture-pane -pt "$session_name" 2> /dev/null \
-            || echo "Session not running."
-    '
-    local selected="$( \
-        echo "$options" \
-        | fzf \
-            --delimiter '/' \
-            --nth '-1' \
-            --with-nth '-1' \
-            --preview "$preview" \
-            --preview-window 'nohidden' \
-            --preview-label 'Session Preview' \
-            --height=50% \
-            --margin=5%,1% \
-            --border \
-            --tmux=center,90%,50%,border-native \
-            --query "$query" \
-            --select-1 \
-    )"
+    # Prompt the user to select a project.
+    local directory="$(prompt_user_to_select_directory "$1")"
 
-    if [ -z "$selected" ]; then
-        # User intentionally closed fzf.
+    if [ -z "$directory" ]; then
+        # User closed the window without selecting anything.
         exit 0
     fi
 
-    # tmux uses ':' and '.' to separate sessions, windows, and panes;
-    # ensure these characters are not used for the session name.
-    local session_name="$(basename "$selected" | tr ':. ' '___')"
-
-    # Create the fallback script if it doesn't already exist.
-    local fallback="${XDG_CONFIG_HOME:-$HOME/.config}/orbit/orbit.sh"
-    if [ ! -e "$fallback" ]; then
-        mkdir --parents "$(dirname "$fallback")"
-        echo "$(get_template)" > "$fallback"
-        chmod u+x "$fallback"
-    fi
-
-    # If `selected` does not contain an orbit.sh, use `fallback` instead.
-    local script="$(test -e "$selected/orbit.sh" && echo "$selected/orbit.sh" || echo "$fallback")"
+    # Create a session name based on the selected directory's name.
+    local session_name="$(get_session_name_from_directory "$directory")"
 
     # Create the tmux session if it doesn't already exist.
     if ! tmux has-session -t "=$session_name" 2> /dev/null; then
-        tmux new-session -d -s "$session_name" -c "$selected"
-        tmux send-keys -t "$session_name" "cat \"$script\" | bash" 'Enter'
+        create_tmux_session "$session_name" "$directory"
     fi
 
-    # Check if we are already in a tmux session.
-    if [ ! -z "${TMUX+x}" ]; then
-        tmux switch-client -t "$session_name"
-    else
-        tmux attach-session -t "$session_name"
-    fi
+    # Attach to the session.
+    attach_to_session "$session_name"
 }
 
 validate_dependencies() {
@@ -98,11 +58,11 @@ parse_options() {
     while [ $# -gt 0 ]; do
         case "$1" in
             '-h' | '--help')
-                orbit_help
+                display_help
                 exit 0
                 ;;
             '-V' | '--version')
-                orbit_version
+                display_version
                 exit 0
                 ;;
             '--')
@@ -121,33 +81,169 @@ parse_options() {
     done
 }
 
-orbit_help() {
+display_help() {
     echo "\
 🚀 Quickly spin up pre-configured tmux sessions for your projects.
 
 USAGE: $(basename "$0") [OPTIONS] [--] [QUERY]
 
 OPTIONS:
-  -h, --help     Print help
-  -V, --version  Print version
+  -h, --help     Display this help message and exit.
+  -V, --version  Display the current version and exit.
 
 Repository: https://github.com/nicdgonzalez/orbit"
 }
 
-orbit_version() {
-    echo "orbit $ORBIT_VERSION"
+display_version() {
+    echo "orbit 0.1.0"
+}
+
+prompt_user_to_select_directory() {
+    declare -r query="$1"
+
+    local directories="$(get_directories | LC_ALL=C sort --key=1,1 --reverse)"
+
+    # This determines what gets shown inside the session preview.
+    local preview='
+        session_name="$(echo {-1} | tr ":. " "___")";
+        tmux has-session -t "=$session_name" 2> /dev/null \
+            && tmux capture-pane -pt "$session_name" 2> /dev/null \
+            || echo "Session not running."
+    ';
+
+    # Prompt the user to select a directory.
+    local directory="$( \
+        echo -e "$directories" \
+        | column --separator='|' --table \
+        | fzf \
+            --delimiter '/' \
+            --with-nth '1,-2,-1' \
+            --preview "$preview" \
+            --preview-window 'nohidden' \
+            --preview-label 'Session Preview' \
+            --height=50% \
+            --margin=5%,1% \
+            --border \
+            --tmux=center,90%,50%,border-native \
+            --query "$query" \
+            --select-1 \
+        | awk -F '[ \t]*' '{ print $2 }'
+    )"
+
+    echo "$directory"
+}
+
+get_directories() {
+    local paths="$(echo "$ORBIT_PATH" | tr ':' ' ')"
+    local directories="$(find $paths -mindepth 1 -maxdepth 1 -type d)"
+    local active_sessions="$(tmux list-sessions -F "#{session_name}")"
+
+    # Convert `directories` string into an array.
+    IFS=',' read -r -a directories <<< "$(echo "$directories" | tr '\n' ',')"
+
+    # Convert `active_sessions` string into an array.
+    IFS=',' read -r -a active_sessions <<< "$(echo "$active_sessions" | tr '\n' ',')"
+
+    for ((i = 0 ; i < ${#directories[@]} ; ++i)); do
+        local directory="${directories[$i]}"
+        local session_name="$(get_session_name_from_directory "$directory")"
+        local matched=0
+
+        for active_session in ${active_sessions[@]}; do
+            if [[ $session_name == $active_session ]]; then
+                directories[$i]="●|$directory"
+                matched=1
+                break
+            fi
+        done
+
+        if [ $matched -eq 0 ]; then
+            directories[$i]="○|$directory"
+        fi
+    done
+
+    printf "%s\n" "${directories[@]}"
+}
+
+get_session_name_from_directory() {
+    declare directory_path="$1"
+
+    normalize_session_name "$(basename "$directory_path")"
+}
+
+normalize_session_name() {
+    declare name="$1"
+
+    # tmux uses ':' and '.' to separate sessions, windows, and panes;
+    # ensure these characters are not used for the session name.
+    echo -n "$name" | tr ':. ' '___'
+}
+
+create_tmux_session() {
+    declare session_name="$1" target_directory="$2"
+
+    local target="$target_directory/orbit.sh"
+    local fallback="${XDG_CONFIG_HOME:-$HOME/.config}/orbit/orbit.sh"
+
+    # Create the fallback script if it doesn't already exist.
+    if [ ! -e "$fallback" ]; then
+        mkdir --parents "$(dirname "$fallback")"
+        echo "$(get_template)" > "$fallback"
+        chmod u+x "$fallback"
+    fi
+
+    # If target does not exist, use the global fallback instead.
+    local script="$([ -e "$target" ] && echo "$target" || echo "$fallback")"
+
+    tmux new-session -d -s "$session_name" -c "$target_directory"
+    tmux send-keys -t "$session_name" "cat \"$script\" | bash" 'Enter'
 }
 
 get_template() {
-    cat "$PWD/template.txt"
+    echo "\
+#!/usr/bin/bash
+
+# Allow the program to exit immediately if any commands fail.
+set -eo pipefail
+# If the environment variable TRACE is set, enable tracing.
+[ ! -z \"\${TRACE+x}\" ] && set -x
+
+main() {
+    # Check if we are inside of a tmux session.
+    if [ -z \"\${TMUX+x}\" ]; then
+        echo >&2 'error: expected script to be ran from within a tmux session'
+        exit 1
+    fi
+
+    # Use '{session}:{window}.{pane}' format to reference windows or panes.
+    local session_name=\"\$(tmux list-sessions -F \"\${session_name}\" -f \"\${session_attached}\")\"
+
+    tmux rename-window \"main\"
+    tmux new-window -d -n \"terminal\"
+    tmux new-window -d -n \"scratch\"
+
+    tmux send-keys -t \"\$session_name:terminal\" 'echo \"Hello, World!\"' 'Enter'
+
+    \$EDITOR .
+}
+
+# Call 'main' with any provided command-line arguments.
+main \"\$@\"
+
+# Unset functions to prevent them from being exposed as shell functions.
+unset -f main"
+}
+
+attach_to_session() {
+    declare -r session_name="$1"
+
+    # Check if we are already in a tmux session.
+    if [ ! -z "${TMUX+x}" ]; then
+        tmux switch-client -t "$session_name"
+    else
+        tmux attach-session -t "$session_name"
+    fi
 }
 
 # The main entry point to the program.
 main "$@"
-
-unset -f main
-unset -f validate_dependencies
-unset -f parse_options
-unset -f orbit_help
-unset -f orbit_version
-unset -f get_template
