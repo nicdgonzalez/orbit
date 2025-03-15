@@ -121,8 +121,6 @@ prompt_user_to_select_directory() {
             --preview "$preview" \
             --preview-window 'nohidden' \
             --preview-label 'Session Preview' \
-            --height=50% \
-            --margin=5%,1% \
             --border \
             --tmux=center,90%,50%,border-native \
             --query "$query" \
@@ -144,7 +142,7 @@ get_directories() {
     # Convert `active_sessions` string into an array.
     IFS=',' read -r -a active_sessions <<< "$(echo "$active_sessions" | tr '\n' ',')"
 
-    for ((i = 0 ; i < ${#directories[@]} ; ++i)); do
+    for ((i = 0; i < ${#directories[@]}; ++i)); do
         local directory="${directories[$i]}"
         local session_name="$(get_session_name_from_directory "$directory")"
         local matched=0

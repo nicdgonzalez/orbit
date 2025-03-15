@@ -4,6 +4,13 @@
 quickly spin up pre-configured tmux sessions for your projects. It supports
 running custom scripts and falls back to a global default when needed.
 
+<div align="center">
+    <img
+        src="./assets/usage-example.png"
+        alt="Orbit opened to the interactive window, showcasing the session preview and fuzzy finding capabilities"
+    />
+</div>
+
 ## Getting started
 
 To use Orbit, you'll need to install the following dependencies:
