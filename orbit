@@ -122,7 +122,7 @@ prompt_user_to_select_directory() {
             --preview-window 'nohidden' \
             --preview-label 'Session Preview' \
             --border \
-            --tmux=center,90%,50%,border-native \
+            --tmux=center,90%,75%,border-native \
             --query "$query" \
             --select-1 \
         | awk -F '[ \t]*' '{ print $2 }'
