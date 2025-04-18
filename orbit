@@ -194,7 +194,7 @@ create_tmux_session() {
     local script="$([ -e "$target" ] && echo "$target" || echo "$fallback")"
 
     tmux new-session -d -s "$session_name" -c "$target_directory"
-    tmux send-keys -t "$session_name" "cat \"$script\" | bash" 'Enter'
+    tmux send-keys -t "$session_name" "bash \"$script\"" 'Enter'
 }
 
 get_template() {
