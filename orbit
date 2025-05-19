@@ -109,23 +109,23 @@ prompt_user_to_select_directory() {
         tmux has-session -t "=$session_name" 2> /dev/null \
             && tmux capture-pane -pt "$session_name" 2> /dev/null \
             || echo "Session not running."
-    ';
+    '
 
     # Prompt the user to select a directory.
-    local directory="$( \
-        echo -e "$directories" \
-        | column --separator='|' --table \
-        | fzf \
-            --delimiter '/' \
-            --with-nth '1,-2,-1' \
-            --preview "$preview" \
-            --preview-window 'nohidden' \
-            --preview-label 'Session Preview' \
-            --border \
-            --tmux=center,90%,75%,border-native \
-            --query "$query" \
-            --select-1 \
-        | awk -F '[ \t]*' '{ print $2 }'
+    local directory="$(
+        echo -e "$directories" |
+            column --separator='|' --table |
+            fzf \
+                --delimiter '/' \
+                --with-nth '1,-2,-1' \
+                --preview "$preview" \
+                --preview-window 'nohidden' \
+                --preview-label 'Session Preview' \
+                --border \
+                --tmux=center,90%,75%,border-native \
+                --query "$query" \
+                --select-1 |
+            awk -F '[ \t]*' '{ print $2 }'
     )"
 
     echo "$directory"
@@ -220,16 +220,11 @@ main() {
     tmux new-window -d -n \"terminal\"
     tmux new-window -d -n \"scratch\"
 
-    tmux send-keys -t \"\$session_name:terminal\" 'echo \"Hello, World!\"' 'Enter'
-
     \$EDITOR .
 }
 
-# Call 'main' with any provided command-line arguments.
 main \"\$@\"
-
-# Unset functions to prevent them from being exposed as shell functions.
-unset -f main"
+"
 }
 
 attach_to_session() {
