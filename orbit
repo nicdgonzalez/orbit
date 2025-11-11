@@ -10,7 +10,17 @@
 set -eo pipefail
 [ ! -z "${TRACE+x}" ] && set -x
 
+# TODO: Would be nice to have proper auto-complete.
+# TODO: Would be nice to auto-rename sessions when directory name changes.
+# TODO: Add subcommands:
+#   new: Copies `$XDG_CONFIG_HOME/orbit/orbit.sh` to `$PWD`.
+#   kill: Executes `tmux kill-session`
+#   open: Move current functionality (subcommands need current query position).
+
 main() {
+    # Remove trailing forward slash from query (bash tab complete adds one).
+    local query="$(echo "$1" | sed 's/\/$//')"
+
     # Ensure the required dependencies are installed.
     validate_dependencies
 
@@ -18,7 +28,7 @@ main() {
     parse_options "$@"
 
     # Prompt the user to select a project.
-    local directory="$(prompt_user_to_select_directory "$1")"
+    local directory="$(prompt_user_to_select_directory "$query")"
 
     if [ -z "$directory" ]; then
         # User closed the window without selecting anything.
