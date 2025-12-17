@@ -143,7 +143,7 @@ prompt_user_to_select_directory() {
 
 get_directories() {
     local paths="$(echo "$ORBIT_PATH" | tr ':' ' ')"
-    local directories="$(find $paths -mindepth 1 -maxdepth 1 -type d)"
+    local directories="$(find $paths -mindepth 1 -maxdepth 1 -type d -or -type l)"
     local active_sessions="$(tmux list-sessions -F "#{session_name}")"
 
     # Convert `directories` string into an array.
