@@ -1,7 +1,11 @@
 use clap_verbosity_flag::Verbosity;
 
+mod attach;
 mod completions;
-mod open;
+mod detach;
+mod init;
+mod kill;
+mod util;
 
 /// Executes the user-selected subcommand.
 pub fn run(args: Parser) -> anyhow::Result<()> {
@@ -9,15 +13,16 @@ pub fn run(args: Parser) -> anyhow::Result<()> {
 
     match args.subcommand {
         Subcommand::Completions(handler) => handler.run(ctx),
-        Subcommand::Open(handler) => handler.run(ctx),
+        Subcommand::Init(handler) => handler.run(ctx),
+        Subcommand::Attach(handler) => handler.run(ctx),
+        Subcommand::Detach(handler) => handler.run(ctx),
+        Subcommand::Kill(handler) => handler.run(ctx),
+        Subcommand::Util(handler) => handler.run(ctx),
     }
 }
 
 /// Represents a subcommand that can be executed.
-pub(super) trait Run
-where
-    Self: clap::Args,
-{
+pub(super) trait Run {
     /// Executes the subcommand.
     fn run(self, ctx: Context) -> anyhow::Result<()>;
 }
@@ -42,6 +47,19 @@ pub enum Subcommand {
     #[clap(hide = true)]
     Completions(completions::Args),
 
-    /// Attaches the client to a session.
-    Open(open::Args),
+    /// Generates a new setup script in the current directory.
+    Init(init::InitArgs),
+
+    /// Opens the target session.
+    Attach(attach::Args),
+
+    /// Closes the current session.
+    Detach(detach::Args),
+
+    /// Kills the target session.
+    Kill(kill::Args),
+
+    /// Utility helpers for setup scripts.
+    #[clap(subcommand)]
+    Util(util::Subcommand),
 }

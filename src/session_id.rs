@@ -1,3 +1,7 @@
+use std::io;
+use std::path::{self, Path};
+
+use path_clean::PathClean as _;
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +35,37 @@ impl SessionId {
         }
 
         Ok(Self(id))
+    }
+
+    /// Creates a new [`SessionId`] from a directory name.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    ///
+    /// - Provided `path` is empty
+    /// - Failed to get current directory
+    /// - Directory name contains invalid Unicode
+    pub fn from_directory(path: impl AsRef<Path>) -> Result<Self, FromDirectoryError> {
+        let path = path.as_ref();
+
+        if path.is_empty() {
+            return Err(FromDirectoryError::EmptyPath);
+        }
+
+        let path = path.clean();
+        let path = path::absolute(&path).map_err(FromDirectoryError::GetCurrentDirectory)?;
+
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or(FromDirectoryError::InvalidUnicode)?;
+
+        Ok(Self::normalize(name))
+    }
+
+    pub(crate) fn from_tmux(id: String) -> Self {
+        Self(id)
     }
 
     /// Creates a new [`SessionId`] with invalid characters replaced by an underscore.
@@ -71,4 +106,45 @@ pub enum InvalidSessionId {
 
     #[error("session id contains invalid characters")]
     InvalidCharacters,
+}
+
+/// Errors that can occur when creating a [`SessionId`] from a directory name.
+#[derive(Debug, Error)]
+pub enum FromDirectoryError {
+    #[error("path must not be empty")]
+    EmptyPath,
+
+    #[error("failed to get current directory")]
+    GetCurrentDirectory(#[source] io::Error),
+
+    #[error("path contains invalid Unicode")]
+    InvalidUnicode,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    #[test]
+    fn from_empty_path() {
+        let path = PathBuf::from("");
+        let error = SessionId::from_directory(&path).unwrap_err();
+        assert!(matches!(error, FromDirectoryError::EmptyPath));
+    }
+
+    #[test]
+    fn from_path_with_trailing_separator() {
+        let path = PathBuf::from("./orbit/");
+        let session_id = SessionId::from_directory(&path).unwrap();
+        assert_eq!(session_id.as_str(), "orbit");
+    }
+
+    #[test]
+    fn from_path_with_special_parent_component() {
+        let path = PathBuf::from("./foo/bar/..");
+        let session_id = SessionId::from_directory(&path).unwrap();
+        assert_eq!(session_id.as_str(), "foo");
+    }
 }
