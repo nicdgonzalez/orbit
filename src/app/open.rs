@@ -110,7 +110,9 @@ pub fn open_session(path: impl AsRef<Path>) -> Result<Session, OpenSessionError>
             fallback_script
         };
 
-        let script_path = script.to_str().expect("path has already been validated");
+        let script_path = script
+            .to_str()
+            .expect("path already validated when creating session ID");
         let command = format!("bash \"{script_path}\"");
 
         session
