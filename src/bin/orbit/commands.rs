@@ -1,6 +1,7 @@
 use clap_verbosity_flag::Verbosity;
 
 mod completions;
+mod open;
 
 /// Executes the user-selected subcommand.
 pub fn run(args: Parser) -> anyhow::Result<()> {
@@ -8,6 +9,7 @@ pub fn run(args: Parser) -> anyhow::Result<()> {
 
     match args.subcommand {
         Subcommand::Completions(handler) => handler.run(ctx),
+        Subcommand::Open(handler) => handler.run(ctx),
     }
 }
 
@@ -39,4 +41,7 @@ pub enum Subcommand {
     /// Generates an auto-complete script for the specified shell.
     #[clap(hide = true)]
     Completions(completions::Args),
+
+    /// Attaches the client to a session.
+    Open(open::Args),
 }
