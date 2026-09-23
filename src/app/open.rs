@@ -1,10 +1,10 @@
 use std::path::{self, Path, PathBuf};
-use std::{env, fs, io};
+use std::{fs, io};
 
 use path_clean::PathClean as _;
 use thiserror::Error;
 
-use crate::session::{Session, SessionError};
+use crate::session::{Session, SessionError, in_tmux_session};
 use crate::session_id::SessionId;
 
 /// Errors that can occur while opening a session.
@@ -164,10 +164,6 @@ fn get_config_directory() -> Option<PathBuf> {
         path.push("orbit");
         path
     })
-}
-
-fn in_tmux_session() -> bool {
-    env::var_os("TMUX").is_some()
 }
 
 #[cfg(test)]

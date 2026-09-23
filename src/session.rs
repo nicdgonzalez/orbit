@@ -1,10 +1,19 @@
-use std::io;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::{env, io};
 
 use thiserror::Error;
 
 use crate::session_id::SessionId;
+
+/// Returns `true` if the client is attached to *any* sessions.
+///
+/// This function checks the `TMUX` environment variable to decide if the client is connected
+/// to a session.
+#[must_use]
+pub fn in_tmux_session() -> bool {
+    env::var_os("TMUX").is_some()
+}
 
 /// Simple wrapper for operating on a tmux session.
 ///
