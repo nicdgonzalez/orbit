@@ -4,9 +4,7 @@ use std::{env, fs, io};
 use path_clean::PathClean as _;
 use thiserror::Error;
 
-use crate::session::{
-    SessionError, attach_session, create_session, send_keys, session_exists, switch_client,
-};
+use crate::session::{Session, SessionError};
 use crate::session_id::SessionId;
 
 /// Errors that can occur while opening a session.
@@ -65,7 +63,7 @@ pub enum OpenSessionError {
 /// - Failed to create target session
 /// - Failed to attach client to target session
 #[expect(clippy::missing_panics_doc)]
-pub fn open_session(path: impl AsRef<Path>) -> Result<SessionId, OpenSessionError> {
+pub fn open_session(path: impl AsRef<Path>) -> Result<Session, OpenSessionError> {
     let path = path.as_ref();
 
     if path.is_empty() {
@@ -77,6 +75,7 @@ pub fn open_session(path: impl AsRef<Path>) -> Result<SessionId, OpenSessionErro
     }
 
     let session_id = session_id_from_directory(path).map_err(OpenSessionError::CreateSessionId)?;
+    let session = Session::new(session_id);
 
     // If not already exists, create a fallback setup script.
     let config_directory = get_config_directory().ok_or(OpenSessionError::GetConfigDirectory)?;
@@ -91,8 +90,14 @@ pub fn open_session(path: impl AsRef<Path>) -> Result<SessionId, OpenSessionErro
     }
 
     // If not already exists, create the session and run the setup script.
-    if !session_exists(&session_id).map_err(OpenSessionError::CheckSessionExists)? {
-        create_session(&session_id, path).map_err(OpenSessionError::CreateSession)?;
+    let session_exists = session
+        .exists()
+        .map_err(OpenSessionError::CheckSessionExists)?;
+
+    if !session_exists {
+        session
+            .create(path)
+            .map_err(OpenSessionError::CreateSession)?;
 
         let custom_script = path.join("orbit.sh");
         let has_custom_script = custom_script
@@ -107,16 +112,19 @@ pub fn open_session(path: impl AsRef<Path>) -> Result<SessionId, OpenSessionErro
 
         let script_path = script.to_str().expect("path has already been validated");
         let command = format!("bash \"{script_path}\"");
-        send_keys(&session_id, &command).map_err(OpenSessionError::RunSetupScript)?;
+
+        session
+            .send_keys(&command)
+            .map_err(OpenSessionError::RunSetupScript)?;
     }
 
     if in_tmux_session() {
-        switch_client(&session_id).map_err(OpenSessionError::SwitchSession)?;
+        session.switch().map_err(OpenSessionError::SwitchSession)?;
     } else {
-        attach_session(&session_id).map_err(OpenSessionError::AttachSession)?;
+        session.attach().map_err(OpenSessionError::AttachSession)?;
     }
 
-    Ok(session_id)
+    Ok(session)
 }
 
 /// Errors that can occur when creating a [`SessionId`] from a directory name.
@@ -133,14 +141,6 @@ pub enum FromDirectoryError {
 }
 
 /// Creates a new [`SessionId`] from a directory name.
-///
-/// # Errors
-///
-/// Returns an error if:
-///
-/// - Provided `path` is empty
-/// - Failed to get current directory
-/// - Directory name contains invalid Unicode
 fn session_id_from_directory(path: impl AsRef<Path>) -> Result<SessionId, FromDirectoryError> {
     let path = path.as_ref();
 
