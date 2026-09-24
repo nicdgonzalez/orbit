@@ -32,6 +32,7 @@ pub(super) struct Context {}
 
 /// Command-line interface for the application.
 #[derive(clap::Parser)]
+#[clap(about = "🚀 Quickly spin up pre-configured tmux sessions")]
 pub struct Parser {
     #[clap(subcommand)]
     pub subcommand: Subcommand,
